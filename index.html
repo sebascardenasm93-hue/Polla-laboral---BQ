@@ -632,20 +632,42 @@ async function loadAll(){
     players=ps.docs.map(d=>({id:d.id,...d.data()}));
     bets={};bs.docs.forEach(d=>{bets[d.id]=d.data();});
     results={};rs.docs.forEach(d=>{results[d.id]=d.data();});
+    showToast('Conectado a Firebase ✓','success');
   } catch(e){
+    console.error('Firebase error:', e);
+    showToast('⚠️ Error Firebase: '+e.message,'error');
+    // Datos demo solo si no hay conexión
     players=[
-      {id:'p1',name:'Carlos Rodríguez',pts:87,exact:5,partidos:18},
-      {id:'p2',name:'Laura Mejía',pts:76,exact:4,partidos:18},
-      {id:'p3',name:'Andrés Torres',pts:71,exact:3,partidos:17},
-      {id:'p4',name:'María Gómez',pts:65,exact:3,partidos:18},
-      {id:'p5',name:'Juan Pedraza',pts:60,exact:2,partidos:16},
+      {id:'p1',name:'Carlos Rodríguez',pts:0,exact:0,partidos:0},
+      {id:'p2',name:'Laura Mejía',pts:0,exact:0,partidos:0},
     ];
-    showToast('Firebase no configurado — mostrando datos de demo','info');
   }
   renderDashboard();
   renderAdmStats();
   renderHistory();
   populatePlayerSelects();
+}
+
+async function firebaseSave(collection, docId, data){
+  try{
+    await db.collection(collection).doc(docId).set(data);
+    return true;
+  } catch(e){
+    console.error(`Error guardando ${collection}/${docId}:`, e);
+    showToast('❌ Error al guardar en Firebase: '+e.message,'error');
+    return false;
+  }
+}
+
+async function firebaseDelete(collection, docId){
+  try{
+    await db.collection(collection).doc(docId).delete();
+    return true;
+  } catch(e){
+    console.error(`Error eliminando ${collection}/${docId}:`, e);
+    showToast('❌ Error al eliminar en Firebase: '+e.message,'error');
+    return false;
+  }
 }
 
 // ── NAV ──
@@ -847,7 +869,8 @@ async function savePronBet(){
   const v=parseInt(document.getElementById('ps3-sv').value)||0;
   if(!bets[player]) bets[player]={};
   bets[player][currentPronMatch.id]={local:l,visit:v,match:`${currentPronMatch.local} vs ${currentPronMatch.visit}`};
-  try{ await db.collection(COL_BETS).doc(player).set(bets[player]); } catch(e){}
+  const ok=await firebaseSave(COL_BETS, player, bets[player]);
+  if(!ok) return;
   showToast(`Pronóstico guardado: ${currentPronMatch.local} ${l}–${v} ${currentPronMatch.visit}`,'success');
   renderMyBets();
   filterPronMatches();
@@ -898,23 +921,27 @@ async function admAddPlayer(){
   if(players.find(p=>p.name.toLowerCase()===name.toLowerCase())){
     showToast(`"${name}" ya está inscrito.`,'error'); return;
   }
+  const btn=document.querySelector('[onclick="admAddPlayer()"]');
+  if(btn){btn.disabled=true; btn.textContent='Guardando...';}
   const newPlayer={name,pts:0,exact:0,partidos:0};
-  players.push(newPlayer);
-  try{ await db.collection(COL_PLAYERS).doc(name).set(newPlayer); } catch(e){}
+  const ok=await firebaseSave(COL_PLAYERS, name, newPlayer);
+  if(btn){btn.disabled=false; btn.textContent='+ Agregar';}
+  if(!ok) return;
+  players.push({...newPlayer, id:name});
   input.value='';
   populatePlayerSelects();
   renderDashboard();
-  showToast(`${name} inscrito correctamente.`,'success');
+  renderAdmStats();
+  showToast(`✓ ${name} inscrito correctamente.`,'success');
 }
 
 async function admRemovePlayer(name){
   if(!confirm(`¿Eliminar a "${name}" de la polla? También se borrarán sus pronósticos.`)) return;
+  const okP=await firebaseDelete(COL_PLAYERS, name);
+  if(!okP) return;
+  await firebaseDelete(COL_BETS, name);
   players=players.filter(p=>p.name!==name);
   delete bets[name];
-  try{
-    await db.collection(COL_PLAYERS).doc(name).delete();
-    await db.collection(COL_BETS).doc(name).delete();
-  } catch(e){}
   populatePlayerSelects();
   renderDashboard();
   renderAdmStats();
@@ -972,7 +999,8 @@ async function admDeleteBet(player, matchId){
   const m=MATCHES.find(x=>x.id===matchId);
   if(!confirm(`¿Eliminar el pronóstico de "${player}" para ${m?m.local+' vs '+m.visit:matchId}?`)) return;
   if(bets[player]) delete bets[player][matchId];
-  try{ await db.collection(COL_BETS).doc(player).set(bets[player]||{}); } catch(e){}
+  const ok=await firebaseSave(COL_BETS, player, bets[player]||{});
+  if(!ok) return;
   renderAdmBets();
   renderAdmStats();
   showToast(`Pronóstico eliminado.`,'info');
@@ -1067,7 +1095,8 @@ async function confirmAdmResult(){
   if(!pendingDeltas) return;
   const {matchId,rl,rv,bets:matchBets}=pendingDeltas;
   results[matchId]={local:rl,visit:rv};
-  try{ await db.collection(COL_RESULTS).doc(matchId).set({local:rl,visit:rv}); } catch(e){}
+  const okR=await firebaseSave(COL_RESULTS, matchId, {local:rl,visit:rv});
+  if(!okR) return;
   for(const {player,pts} of matchBets){
     const p=players.find(x=>x.name===player);
     if(!p) continue;
@@ -1077,7 +1106,7 @@ async function confirmAdmResult(){
     p._matchPts[matchId]=pts;
     if(pts===5) p.exact=(p.exact||0)+1;
     p.partidos=(p.partidos||0)+1;
-    try{ await db.collection(COL_PLAYERS).doc(p.id||player).set({name:p.name,pts:p.pts,exact:p.exact,partidos:p.partidos}); } catch(e){}
+    await firebaseSave(COL_PLAYERS, p.id||player, {name:p.name,pts:p.pts,exact:p.exact,partidos:p.partidos});
   }
   showToast(`¡Ranking actualizado! ${matchBets.length} jugador(es) con puntos.`,'success');
   renderDashboard();
