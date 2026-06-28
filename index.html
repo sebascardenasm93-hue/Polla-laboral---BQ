@@ -152,6 +152,7 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
   <div class="nav-tabs">
     <button class="nav-tab" onclick="showPage('pronosticos',this)">Pronósticos</button>
     <button class="nav-tab" onclick="showPage('dashboard',this)">Ranking</button>
+    <button class="nav-tab" onclick="showPage('transparencia',this)">Apuestas</button>
     <button class="nav-tab admin-tab" onclick="showPage('admin',this)">Admin</button>
   </div>
 </nav>
@@ -279,6 +280,21 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
   <div style="text-align:center;padding:1rem 0;font-size:12px;color:var(--text-muted)">
     <strong>5</strong> marcador exacto · <strong>3</strong> ganador/empate · <strong>1</strong> un equipo correcto · <strong>0</strong> sin acierto
   </div>
+</div>
+
+<!-- ══ TRANSPARENCIA ══ -->
+<div class="page" id="page-transparencia">
+  <div class="card" style="border-left:4px solid var(--olive)">
+    <div class="card-title">🔍 Pronósticos por partido</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Consulta los pronósticos de todos los participantes para cada partido. Los partidos abiertos muestran 🟢, los cerrados 🔒 y los jugados tienen el resultado final.</p>
+    <div class="field">
+      <label>Selecciona un partido</label>
+      <select id="trans-match-select" onchange="renderTransparencia()">
+        <option value="">— Selecciona partido —</option>
+      </select>
+    </div>
+  </div>
+  <div id="trans-content"></div>
 </div>
 
 <!-- ══ ADMIN ══ -->
@@ -419,8 +435,9 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
     <!-- Historial -->
     <div class="card">
       <div class="card-title">📋 Partidos publicados</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Abre o cierra las apuestas de cada partido. Solo se pueden apostar partidos <strong style="color:var(--text)">abiertos</strong>.</p>
       <table class="rank-table">
-        <thead><tr><th>Partido</th><th>Fase</th><th>Resultado</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Partido</th><th>Fase</th><th>Resultado</th><th>Apuestas</th></tr></thead>
         <tbody id="history-tbody"></tbody>
       </table>
     </div>
@@ -442,7 +459,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 const COL_PLAYERS='players', COL_BETS='bets', COL_RESULTS='results', COL_MATCHES='matches';
-const ADMIN_PASS='mundial2026';
+const ADMIN_PASS='Bouquetpolla26**';
 
 const TEAMS=[
   // CONMEBOL (6)
@@ -529,6 +546,7 @@ async function loadAll(){
   renderAdmStats();
   renderHistory();
   populateSelects();
+  populateTransMatch();
   // Ocultar spinner de carga
   const loading=document.getElementById('pron-loading');
   const content=document.getElementById('pron-s1-content');
@@ -544,6 +562,7 @@ function showPage(id,btn){
   pg.classList.add('active');pg.style.display='block';
   if(btn) btn.classList.add('active');
   if(id==='pronosticos') populateSelects();
+  if(id==='transparencia'){populateTransMatch();document.getElementById('trans-content').innerHTML='';}
 }
 
 // ── DASHBOARD ──
@@ -637,11 +656,14 @@ function filterPronMatches(){
   sel.innerHTML='<option value="">— Selecciona partido —</option>';
   MATCHES.filter(m=>phase==='all'||m.phase===phase).forEach(m=>{
     const done=pb[m.id]!==undefined;
+    const open=m.open!==false;
     const o=document.createElement('option');
     o.value=m.id;
-    o.textContent=`${m.col?'🇨🇴 ':''}${m.local} vs ${m.visit}${m.fecha?' · '+m.fecha:''}${done?' ✓':''}`;
+    const closedTag=!open&&!done?' 🔒':'';
+    o.textContent=`${m.col?'🇨🇴 ':''}${m.local} vs ${m.visit}${m.fecha?' · '+m.fecha:''}${done?' ✓':''}${closedTag}`;
     if(m.col) o.style.fontWeight='700';
     if(done) o.style.color='var(--olive)';
+    if(!open&&!done) o.style.color='var(--text-muted)';
     sel.appendChild(o);
   });
   document.getElementById('pron-s3').style.display='none';
@@ -653,12 +675,20 @@ function pronStep2(){
   if(!currentPronMatch) return;
   const prev=(bets[currentPronPlayer]||{})[id];
   const already=prev!==undefined;
+  const closed=currentPronMatch.open===false;
+
   document.getElementById('ps3-sl').value=prev?prev.local:0;
   document.getElementById('ps3-sv').value=prev?prev.visit:0;
-  document.getElementById('ps3-sl').disabled=already;
-  document.getElementById('ps3-sv').disabled=already;
-  document.getElementById('pron-warn').innerHTML=already
-    ?`<div style="padding:9px 13px;background:var(--gold-light);border-left:3px solid var(--gold);border-radius:var(--radius-sm);font-size:12px;color:var(--gold);margin-bottom:.75rem;font-weight:600">⚠️ Ya tienes un pronóstico para este partido (${prev.local}–${prev.visit}). Solo el admin puede modificarlo.</div>`:'';
+  document.getElementById('ps3-sl').disabled=already||closed;
+  document.getElementById('ps3-sv').disabled=already||closed;
+
+  let warnHtml='';
+  if(already){
+    warnHtml=`<div style="padding:9px 13px;background:var(--gold-light);border-left:3px solid var(--gold);border-radius:var(--radius-sm);font-size:12px;color:var(--gold);margin-bottom:.75rem;font-weight:600">⚠️ Ya tienes un pronóstico para este partido (${prev.local}–${prev.visit}). Solo el admin puede modificarlo.</div>`;
+  } else if(closed){
+    warnHtml=`<div style="padding:9px 13px;background:#FCEBEB;border-left:3px solid #791F1F;border-radius:var(--radius-sm);font-size:12px;color:#791F1F;margin-bottom:.75rem;font-weight:600">🔒 Las apuestas para este partido están cerradas.</div>`;
+  }
+  document.getElementById('pron-warn').innerHTML=warnHtml;
   document.getElementById('pron-col-tag').innerHTML=currentPronMatch.col?'<span class="col-tag">🇨🇴 Partido de Colombia</span>':'';
   document.getElementById('pron-fecha').textContent=currentPronMatch.fecha||'';
   document.getElementById('ps3-fl').textContent=currentPronMatch.fl;
@@ -667,7 +697,7 @@ function pronStep2(){
   document.getElementById('ps3-visit').textContent=currentPronMatch.visit;
   document.getElementById('ps3-phase').className='ph '+(PHASE_CLS[currentPronMatch.phase]||'ph-g');
   document.getElementById('ps3-phase').textContent=currentPronMatch.phase;
-  document.getElementById('pron-save-btn').style.display=already?'none':'flex';
+  document.getElementById('pron-save-btn').style.display=(already||closed)?'none':'flex';
   pronGoStep(3);updatePronPreview();
 }
 function updatePronPreview(){
@@ -678,6 +708,7 @@ function updatePronPreview(){
 }
 async function savePronBet(){
   if(!currentPronPlayer||!currentPronMatch) return;
+  if(currentPronMatch.open===false){showToast('Las apuestas para este partido están cerradas.','error');return;}
   if((bets[currentPronPlayer]||{})[currentPronMatch.id]!==undefined){
     showToast('Ya tienes un pronóstico para este partido.','error');return;
   }
@@ -932,13 +963,75 @@ function renderAdmStats(){
 function renderHistory(){
   document.getElementById('history-tbody').innerHTML=MATCHES.map(m=>{
     const r=results[m.id],done=r!==undefined;
+    const open=m.open!==false; // default open
+    const openBtnStyle=open
+      ?'background:#FCEBEB;color:#791F1F;border:none;border-radius:4px;font-size:11px;font-weight:600;padding:3px 10px;cursor:pointer'
+      :'background:#EAF3DE;color:#27500A;border:none;border-radius:4px;font-size:11px;font-weight:600;padding:3px 10px;cursor:pointer';
     return `<tr>
       <td>${m.fl} ${m.local} vs ${m.visit} ${m.fv}</td>
       <td><span class="ph ${PHASE_CLS[m.phase]||'ph-g'}">${m.phase}</span></td>
       <td style="font-weight:${done?600:400};color:${done?'var(--text)':'var(--text-muted)'}">${done?r.local+' – '+r.visit:'—'}</td>
-      <td><span class="chip ${done?'chip-done':'chip-pend'}">${done?'Jugado':'Pendiente'}</span></td>
+      <td><button onclick="toggleMatchOpen('${m.id}',${!open})" style="${openBtnStyle}">${open?'🔴 Cerrar':'🟢 Abrir'}</button></td>
     </tr>`;
   }).join('');
+}
+
+async function toggleMatchOpen(matchId, newState){
+  const m=MATCHES.find(x=>x.id===matchId);
+  if(!m) return;
+  m.open=newState;
+  await fbSave(COL_MATCHES, matchId, {...m, open:newState});
+  renderHistory();
+  filterPronMatches();
+  populateTransMatch();
+  showToast(`Apuestas ${newState?'abiertas':'cerradas'} para ${m.local} vs ${m.visit}.`, newState?'success':'info');
+}
+
+function populateTransMatch(){
+  const sel=document.getElementById('trans-match-select');
+  if(!sel) return;
+  sel.innerHTML='<option value="">— Selecciona partido —</option>';
+  MATCHES.forEach(m=>{
+    const r=results[m.id];
+    const open=m.open!==false;
+    const o=document.createElement('option');
+    o.value=m.id;
+    o.textContent=`${m.fl} ${m.local} vs ${m.visit} ${m.fv}${r?' ('+r.local+'-'+r.visit+')':open?' 🟢':' 🔒'}`;
+    sel.appendChild(o);
+  });
+}
+
+function renderTransparencia(){
+  const matchId=document.getElementById('trans-match-select').value;
+  const c=document.getElementById('trans-content');
+  if(!matchId){c.innerHTML='';return;}
+  const m=MATCHES.find(x=>x.id===matchId);
+  if(!m){c.innerHTML='';return;}
+  const r=results[matchId];
+  // Collect all bets for this match
+  const matchBets=[];
+  Object.keys(bets).forEach(player=>{
+    if(bets[player][matchId]!==undefined){
+      const b=bets[player][matchId];
+      const pts=r?calcPts(r.local,r.visit,b.local,b.visit):null;
+      matchBets.push({player,local:b.local,visit:b.visit,pts});
+    }
+  });
+  matchBets.sort((a,b)=>(b.pts||0)-(a.pts||0));
+  c.innerHTML=`<div class="card">
+    <div class="card-title">${m.fl} ${m.local} vs ${m.visit} ${m.fv}</div>
+    ${r?`<div style="text-align:center;padding:.5rem 0 1rem;font-size:22px;font-weight:700;color:var(--olive)">${r.local} – ${r.visit} <span style="font-size:13px;font-weight:400;color:var(--text-muted)">(resultado final)</span></div>`:''}
+    ${!matchBets.length
+      ?'<p style="font-size:13px;color:var(--text-muted)">Ningún participante apostó en este partido.</p>'
+      :`<table class="rank-table">
+        <thead><tr><th>Participante</th><th>Pronóstico</th>${r?'<th>Pts</th>':''}</tr></thead>
+        <tbody>${matchBets.map(b=>`<tr>
+          <td style="font-weight:500">${b.player}</td>
+          <td style="font-weight:600">${b.local} – ${b.visit}</td>
+          ${r?`<td><span class="chip chip-${b.pts}">${b.pts}p</span></td>`:''}
+        </tr>`).join('')}</tbody>
+      </table>`}
+  </div>`;
 }
 
 // ── Init ──
