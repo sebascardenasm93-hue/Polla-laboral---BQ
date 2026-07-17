@@ -286,7 +286,7 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
 <div class="page" id="page-transparencia">
   <div class="card" style="border-left:4px solid var(--olive)">
     <div class="card-title">🔍 Pronósticos por partido</div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Consulta los pronósticos de todos los participantes para cada partido. Los partidos abiertos muestran 🟢, los cerrados 🔒 y los jugados tienen el resultado final.</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Consulta los pronósticos de todos los participantes. Solo se muestran partidos <strong style="color:var(--text)">cerrados 🔒 o ya jugados</strong>.</p>
     <div class="field">
       <label>Selecciona un partido</label>
       <select id="trans-match-select" onchange="renderTransparencia()">
@@ -729,8 +729,13 @@ function renderMyBets(){
   const c=document.getElementById('my-bets-list');
   if(!currentPronPlayer){c.innerHTML='<p style="font-size:13px;color:var(--text-muted)">Selecciona tu nombre para ver tus apuestas.</p>';return;}
   const pb=bets[currentPronPlayer]||{};
-  const keys=Object.keys(pb);
-  if(!keys.length){c.innerHTML='<p style="font-size:13px;color:var(--text-muted)">Aún no tienes pronósticos guardados.</p>';return;}
+  const keys=Object.keys(pb).filter(id=>{
+    const m=MATCHES.find(x=>x.id===id);
+    return m && (m.open===false || results[id]!==undefined);
+  });
+  if(!keys.length){
+    c.innerHTML='<p style="font-size:13px;color:var(--text-muted)">Tus pronósticos aparecerán aquí una vez que el admin cierre cada partido.</p>';return;
+  }
   c.innerHTML=`<table class="rank-table"><thead><tr><th>Partido</th><th>Apuesta</th><th>Pts</th></tr></thead><tbody>`+
     keys.map(id=>{
       const b=pb[id],r=results[id];
@@ -991,12 +996,11 @@ function populateTransMatch(){
   const sel=document.getElementById('trans-match-select');
   if(!sel) return;
   sel.innerHTML='<option value="">— Selecciona partido —</option>';
-  MATCHES.forEach(m=>{
+  MATCHES.filter(m=>m.open===false||results[m.id]).forEach(m=>{
     const r=results[m.id];
-    const open=m.open!==false;
     const o=document.createElement('option');
     o.value=m.id;
-    o.textContent=`${m.fl} ${m.local} vs ${m.visit} ${m.fv}${r?' ('+r.local+'-'+r.visit+')':open?' 🟢':' 🔒'}`;
+    o.textContent=`${m.fl} ${m.local} vs ${m.visit} ${m.fv}${r?' ('+r.local+'-'+r.visit+')':' 🔒'}`;
     sel.appendChild(o);
   });
 }
