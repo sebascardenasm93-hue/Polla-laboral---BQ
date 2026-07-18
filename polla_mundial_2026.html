@@ -153,6 +153,7 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
     <button class="nav-tab" onclick="showPage('pronosticos',this)">Pronósticos</button>
     <button class="nav-tab" onclick="showPage('dashboard',this)">Ranking</button>
     <button class="nav-tab" onclick="showPage('transparencia',this)">Apuestas</button>
+    <button class="nav-tab" onclick="showPage('final',this)" style="color:rgba(240,210,140,.9)">🏆 Final</button>
     <button class="nav-tab admin-tab" onclick="showPage('admin',this)">Admin</button>
   </div>
 </nav>
@@ -297,6 +298,68 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
   <div id="trans-content"></div>
 </div>
 
+<!-- ══ FINAL ESPECIAL ══ -->
+<div class="page" id="page-final">
+  <div class="card" style="border-left:4px solid var(--gold)">
+    <div class="card-title" style="border-color:var(--gold)">🏆 Ruleta de la Final</div>
+    <p style="font-size:13px;color:var(--text-muted);line-height:1.6">El sistema asigna un marcador único al azar a cada participante. Gana quien tenga el marcador exacto del partido.</p>
+  </div>
+
+  <!-- Estado: esperando asignación -->
+  <div id="final-pending" class="card" style="text-align:center;padding:2rem">
+    <div style="font-size:48px;margin-bottom:1rem">⏳</div>
+    <div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:.5rem">Los marcadores aún no han sido asignados</div>
+    <div style="font-size:13px;color:var(--text-muted)">El administrador activará la ruleta antes de la final.</div>
+  </div>
+
+  <!-- Estado: conteo regresivo -->
+  <div id="final-countdown" class="card" style="display:none;text-align:center;padding:2rem">
+    <div style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem">¡Los marcadores se revelan en!</div>
+    <div id="countdown-num" style="font-family:'Playfair Display',serif;font-size:72px;font-weight:700;color:var(--olive);line-height:1">5</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:.5rem">Todos verán su marcador al mismo tiempo</div>
+  </div>
+
+  <!-- Estado: revelación -->
+  <div id="final-revealed" style="display:none">
+    <div class="card" style="text-align:center;padding:1.5rem;background:var(--gold-light);border-color:var(--gold)">
+      <div style="font-size:13px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tu marcador asignado</div>
+      <div id="final-my-result" style="font-family:'Playfair Display',serif;font-size:48px;font-weight:700;color:var(--olive)">—</div>
+      <div id="final-my-name" style="font-size:13px;color:var(--text-muted);margin-top:.5rem"></div>
+      <div id="final-my-winner" style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px"></div>
+    </div>
+
+    <div class="card">
+      <div class="field" style="margin-bottom:1rem">
+        <label>Ver el marcador de otro participante</label>
+        <select id="final-view-select" onchange="renderFinalParticipant()">
+          <option value="">— Selecciona participante —</option>
+        </select>
+      </div>
+      <div id="final-view-result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="border-color:var(--gold)">📋 Todos los marcadores</div>
+      <div id="final-all-list"></div>
+    </div>
+
+    <div id="final-winner-card" style="display:none" class="card" style="background:var(--gold-light);border-color:var(--gold);text-align:center;padding:1.5rem">
+    </div>
+  </div>
+
+  <!-- Buscar mi marcador -->
+  <div id="final-search-box" style="display:none" class="card">
+    <div class="card-title" style="border-color:var(--gold)">🔍 ¿Cuál es mi marcador?</div>
+    <div class="field">
+      <label>Selecciona tu nombre</label>
+      <select id="final-player-select" onchange="showMyFinalResult()">
+        <option value="">— Selecciona tu nombre —</option>
+      </select>
+    </div>
+    <div id="final-my-card"></div>
+  </div>
+</div>
+
 <!-- ══ ADMIN ══ -->
 <div class="page" id="page-admin">
   <div id="admin-lock" class="card lock-screen">
@@ -432,6 +495,45 @@ nav{background:var(--olive);padding:0 1.75rem;display:flex;align-items:center;ju
       <div id="adm-bets-list"></div>
     </div>
 
+    <!-- Ruleta Final -->
+    <div class="card" style="border-left:3px solid var(--gold)">
+      <div class="card-title" style="border-color:var(--gold)">🏆 Ruleta de la Final</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Inscribe participantes y asigna marcadores únicos al azar. Cada persona recibe un marcador diferente.</p>
+
+      <div style="display:flex;gap:8px;margin-bottom:1rem">
+        <div class="field" style="flex:1;margin-bottom:0">
+          <label>Nombre del participante</label>
+          <input type="text" id="final-new-participant" placeholder="Nombre completo..." autocomplete="off" onkeydown="if(event.key==='Enter')finalAddParticipant()">
+        </div>
+        <button class="btn btn-green" style="width:auto;padding:0 18px;align-self:flex-end" onclick="finalAddParticipant()">+ Agregar</button>
+      </div>
+
+      <div id="final-admin-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem">
+        <div class="field" style="margin-bottom:0">
+          <label>Partido (ej: Francia vs España)</label>
+          <input type="text" id="final-match-name" placeholder="Equipo A vs Equipo B">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Goles máximos por equipo</label>
+          <select id="final-max-goals">
+            <option value="3">Hasta 3 goles</option>
+            <option value="4">Hasta 4 goles</option>
+            <option value="5">Hasta 5 goles</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="final-assign-preview" style="display:none;margin-bottom:1rem;padding:10px 14px;background:var(--cream);border-radius:var(--radius-sm);font-size:13px;color:var(--text-muted)"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-gold" onclick="finalPreviewAssign()">👁 Previsualizar asignación</button>
+        <button class="btn btn-green" id="final-confirm-btn" style="display:none" onclick="finalConfirmAssign()">🚀 Confirmar y activar conteo</button>
+      </div>
+      <button class="btn btn-outline" style="margin-top:8px" onclick="finalReset()">🗑 Reiniciar módulo final</button>
+    </div>
+
     <!-- Historial -->
     <div class="card">
       <div class="card-title">📋 Partidos publicados</div>
@@ -547,6 +649,7 @@ async function loadAll(){
   renderHistory();
   populateSelects();
   populateTransMatch();
+  loadFinal();
   // Ocultar spinner de carga
   const loading=document.getElementById('pron-loading');
   const content=document.getElementById('pron-s1-content');
@@ -563,6 +666,7 @@ function showPage(id,btn){
   if(btn) btn.classList.add('active');
   if(id==='pronosticos') populateSelects();
   if(id==='transparencia'){populateTransMatch();document.getElementById('trans-content').innerHTML='';}
+  if(id==='final') loadFinal();
 }
 
 // ── DASHBOARD ──
@@ -749,7 +853,7 @@ function checkAdmin(){
   if(document.getElementById('admin-pw').value===ADMIN_PASS){
     document.getElementById('admin-lock').style.display='none';
     document.getElementById('admin-panel').style.display='block';
-    populateSelects();populateTeamSelects();filterAdmMatches();renderAdmStats();renderHistory();
+    populateSelects();populateTeamSelects();filterAdmMatches();renderAdmStats();renderHistory();loadFinalAdmin();
   } else showToast('Contraseña incorrecta','error');
 }
 
@@ -1038,7 +1142,273 @@ function renderTransparencia(){
   </div>`;
 }
 
-// ── Init ──
+// ══════════════ MÓDULO FINAL ══════════════
+const COL_FINAL='final_module';
+let finalData=null; // {matchName, participants:[{name,local,visit}], status:'pending'|'countdown'|'revealed', revealAt}
+let countdownInterval=null;
+
+async function loadFinal(){
+  try{
+    const doc=await db.collection(COL_FINAL).doc('data').get();
+    if(doc.exists) finalData=doc.data();
+  }catch(e){finalData=null;}
+  renderFinalPage();
+}
+
+function renderFinalPage(){
+  const pending=document.getElementById('final-pending');
+  const countdown=document.getElementById('final-countdown');
+  const revealed=document.getElementById('final-revealed');
+  const searchBox=document.getElementById('final-search-box');
+  if(!finalData||finalData.status==='pending'){
+    pending.style.display='block';
+    countdown.style.display='none';
+    revealed.style.display='none';
+    searchBox.style.display='none';
+    return;
+  }
+  pending.style.display='none';
+  if(finalData.status==='countdown'){
+    countdown.style.display='block';
+    revealed.style.display='none';
+    searchBox.style.display='none';
+    startCountdown();
+    return;
+  }
+  if(finalData.status==='revealed'){
+    countdown.style.display='none';
+    revealed.style.display='block';
+    searchBox.style.display='block';
+    renderFinalRevealed();
+    populateFinalSelects();
+  }
+}
+
+function startCountdown(){
+  if(countdownInterval) clearInterval(countdownInterval);
+  const el=document.getElementById('countdown-num');
+  const revealAt=finalData.revealAt;
+  function tick(){
+    const remaining=Math.max(0,Math.ceil((revealAt-Date.now())/1000));
+    el.textContent=remaining;
+    if(remaining<=0){
+      clearInterval(countdownInterval);
+      // Auto-reveal
+      finalData.status='revealed';
+      fbSave(COL_FINAL,'data',finalData);
+      renderFinalPage();
+    }
+  }
+  tick();
+  countdownInterval=setInterval(tick,500);
+}
+
+function renderFinalRevealed(){
+  if(!finalData) return;
+  const ps=finalData.participants||[];
+  // Check for winner (if real result set)
+  const real=finalData.realLocal!==undefined;
+  const winners=real?ps.filter(p=>p.local===finalData.realLocal&&p.visit===finalData.realVisit):[];
+
+  // Winner card
+  const wc=document.getElementById('final-winner-card');
+  if(real){
+    wc.style.display='block';
+    if(winners.length){
+      wc.innerHTML=`<div style="font-size:32px;margin-bottom:.5rem">🏆</div>
+        <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold);margin-bottom:.5rem">¡Ganador${winners.length>1?'es':''}!</div>
+        ${winners.map(w=>`<div style="font-size:16px;font-weight:600;color:var(--text)">${w.name}</div>`).join('')}
+        <div style="font-size:13px;color:var(--text-muted);margin-top:.5rem">Marcador exacto: ${finalData.realLocal}–${finalData.realVisit}</div>`;
+    } else {
+      wc.innerHTML=`<div style="font-size:13px;color:var(--text-muted);padding:.5rem">Resultado real: ${finalData.realLocal}–${finalData.realVisit} · Nadie acertó el marcador exacto.</div>`;
+    }
+  } else {
+    wc.style.display='none';
+  }
+
+  // Full list
+  const sorted=[...ps].sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('final-all-list').innerHTML=`
+    <table class="rank-table">
+      <thead><tr><th>Participante</th><th>Marcador asignado</th><th>Ganador</th></tr></thead>
+      <tbody>${sorted.map(p=>{
+        const win=real&&p.local===finalData.realLocal&&p.visit===finalData.realVisit;
+        return `<tr style="${win?'background:var(--gold-light)':''}">
+          <td style="font-weight:500">${p.name}${win?' 🏆':''}</td>
+          <td style="font-weight:700;font-size:15px">${p.local} – ${p.visit}</td>
+          <td>${win?'<span class="chip chip-5">✓</span>':'—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function populateFinalSelects(){
+  if(!finalData) return;
+  const ps=finalData.participants||[];
+  // View select
+  const vs=document.getElementById('final-view-select');
+  if(vs){
+    vs.innerHTML='<option value="">— Selecciona participante —</option>';
+    ps.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
+      const o=document.createElement('option');o.value=p.name;o.textContent=p.name;vs.appendChild(o);
+    });
+  }
+  // Player select (search my result)
+  const psel=document.getElementById('final-player-select');
+  if(psel){
+    psel.innerHTML='<option value="">— Selecciona tu nombre —</option>';
+    ps.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
+      const o=document.createElement('option');o.value=p.name;o.textContent=p.name;psel.appendChild(o);
+    });
+  }
+}
+
+function renderFinalParticipant(){
+  const name=document.getElementById('final-view-select').value;
+  const c=document.getElementById('final-view-result');
+  if(!name||!finalData){c.innerHTML='';return;}
+  const p=finalData.participants.find(x=>x.name===name);
+  if(!p){c.innerHTML='';return;}
+  const winnerText=p.local>p.visit?finalData.matchName?.split(' vs ')[0]||'Local':p.visit>p.local?finalData.matchName?.split(' vs ')[1]||'Visitante':'Empate';
+  c.innerHTML=`<div style="text-align:center;padding:1rem;background:var(--cream);border-radius:var(--radius-sm)">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">${name}</div>
+    <div style="font-family:'Playfair Display',serif;font-size:42px;font-weight:700;color:var(--olive)">${p.local} – ${p.visit}</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px">${winnerText}</div>
+  </div>`;
+}
+
+function showMyFinalResult(){
+  const name=document.getElementById('final-player-select').value;
+  const c=document.getElementById('final-my-card');
+  if(!name||!finalData){c.innerHTML='';return;}
+  const p=finalData.participants.find(x=>x.name===name);
+  if(!p){c.innerHTML='<p style="font-size:13px;color:var(--text-muted)">No encontrado.</p>';return;}
+  const winnerText=p.local>p.visit?finalData.matchName?.split(' vs ')[0]||'Local':p.visit>p.local?finalData.matchName?.split(' vs ')[1]||'Visitante':'Empate';
+  c.innerHTML=`<div style="text-align:center;padding:1.25rem;background:var(--gold-light);border-radius:var(--radius-sm);border:1px solid var(--gold)">
+    <div style="font-size:12px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tu marcador asignado, ${name.split(' ')[0]}</div>
+    <div style="font-family:'Playfair Display',serif;font-size:52px;font-weight:700;color:var(--olive);line-height:1">${p.local} – ${p.visit}</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:8px">${winnerText}</div>
+  </div>`;
+}
+
+// ── Admin final functions ──
+let finalParticipants=[]; // lista local antes de confirmar
+let finalAssignment=null; // asignación previsualizada
+
+async function loadFinalAdmin(){
+  if(!finalData) await loadFinal();
+  renderFinalAdminList();
+  if(finalData&&finalData.participants){
+    finalParticipants=finalData.participants.map(p=>p.name);
+    renderFinalAdminList();
+  }
+}
+
+function finalAddParticipant(){
+  const input=document.getElementById('final-new-participant');
+  const name=input.value.trim();
+  if(!name){showToast('Escribe un nombre.','error');return;}
+  if(finalParticipants.find(p=>p.toLowerCase()===name.toLowerCase())){
+    showToast(`"${name}" ya está en la lista.`,'error');return;
+  }
+  finalParticipants.push(name);
+  input.value='';
+  renderFinalAdminList();
+  document.getElementById('final-assign-preview').style.display='none';
+  document.getElementById('final-confirm-btn').style.display='none';
+  finalAssignment=null;
+}
+
+function finalRemoveParticipant(name){
+  finalParticipants=finalParticipants.filter(p=>p!==name);
+  renderFinalAdminList();
+  document.getElementById('final-assign-preview').style.display='none';
+  document.getElementById('final-confirm-btn').style.display='none';
+  finalAssignment=null;
+}
+
+function renderFinalAdminList(){
+  const c=document.getElementById('final-admin-list');
+  if(!c) return;
+  if(!finalParticipants.length){
+    c.innerHTML='<p style="font-size:13px;color:var(--text-muted)">Sin participantes inscritos aún.</p>';return;
+  }
+  c.innerHTML=finalParticipants.map(name=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--cream);border-radius:var(--radius-sm);font-size:13px">
+      <span style="font-weight:500">${name}</span>
+      <button onclick="finalRemoveParticipant('${name}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:15px;padding:2px 4px">✕</button>
+    </div>`).join('');
+}
+
+function generateUniqueResults(count, maxGoals){
+  // Generate all possible scores 0-maxGoals x 0-maxGoals
+  const all=[];
+  for(let l=0;l<=maxGoals;l++) for(let v=0;v<=maxGoals;v++) all.push({local:l,visit:v});
+  if(count>all.length) return null; // not enough unique scores
+  // Fisher-Yates shuffle
+  for(let i=all.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [all[i],all[j]]=[all[j],all[i]];
+  }
+  return all.slice(0,count);
+}
+
+function finalPreviewAssign(){
+  const matchName=document.getElementById('final-match-name').value.trim();
+  const maxGoals=parseInt(document.getElementById('final-max-goals').value);
+  if(!matchName){showToast('Escribe el nombre del partido.','error');return;}
+  if(finalParticipants.length<1){showToast('Agrega al menos un participante.','error');return;}
+  const results=generateUniqueResults(finalParticipants.length,maxGoals);
+  if(!results){
+    showToast(`No hay suficientes marcadores únicos para ${finalParticipants.length} participantes con máximo ${maxGoals} goles. Sube el máximo de goles.`,'error');
+    return;
+  }
+  // Shuffle participants too
+  const shuffled=[...finalParticipants];
+  for(let i=shuffled.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+  }
+  finalAssignment=shuffled.map((name,i)=>({name,local:results[i].local,visit:results[i].visit}));
+  const prev=document.getElementById('final-assign-preview');
+  prev.style.display='block';
+  prev.innerHTML=`<strong style="color:var(--text)">${matchName} · ${finalParticipants.length} participantes · máx ${maxGoals} goles</strong><br>
+    <span style="color:var(--olive)">✓ ${(maxGoals+1)*(maxGoals+1)} marcadores posibles, todos únicos. Listo para confirmar.</span>`;
+  document.getElementById('final-confirm-btn').style.display='flex';
+}
+
+async function finalConfirmAssign(){
+  if(!finalAssignment) return;
+  const matchName=document.getElementById('final-match-name').value.trim();
+  const revealAt=Date.now()+6000; // 6 seconds countdown
+  const data={
+    matchName,
+    participants:finalAssignment,
+    status:'countdown',
+    revealAt,
+    createdAt:Date.now(),
+  };
+  const ok=await fbSave(COL_FINAL,'data',data);
+  if(!ok) return;
+  finalData=data;
+  showToast('¡Ruleta activada! El conteo regresivo ha comenzado.','success');
+  document.getElementById('final-confirm-btn').style.display='none';
+  document.getElementById('final-assign-preview').style.display='none';
+}
+
+async function finalReset(){
+  if(!confirm('¿Reiniciar el módulo final? Se borrarán todos los datos de la ruleta.')) return;
+  await fbDel(COL_FINAL,'data');
+  finalData=null;
+  finalParticipants=[];
+  finalAssignment=null;
+  renderFinalAdminList();
+  document.getElementById('final-assign-preview').style.display='none';
+  document.getElementById('final-confirm-btn').style.display='none';
+  showToast('Módulo final reiniciado.','info');
+}
+
+
 (function(){
   document.querySelectorAll('.page').forEach(p=>{p.style.display='none';p.classList.remove('active');});
   const pg=document.getElementById('page-pronosticos');
