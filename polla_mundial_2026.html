@@ -1341,16 +1341,34 @@ function renderFinalAdminList(){
 }
 
 function generateUniqueResults(count, maxGoals){
-  // Generate all possible scores 0-maxGoals x 0-maxGoals
+  // Generar todos los marcadores posibles con peso inversamente proporcional a los goles totales
   const all=[];
-  for(let l=0;l<=maxGoals;l++) for(let v=0;v<=maxGoals;v++) all.push({local:l,visit:v});
-  if(count>all.length) return null; // not enough unique scores
-  // Fisher-Yates shuffle
-  for(let i=all.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [all[i],all[j]]=[all[j],all[i]];
+  for(let l=0;l<=maxGoals;l++){
+    for(let v=0;v<=maxGoals;v++){
+      const totalGoals=l+v;
+      // Peso: marcadores con menos goles tienen más probabilidad
+      // Fórmula: peso = (maxGoals*2 - totalGoals + 1)^2
+      const weight=Math.pow((maxGoals*2-totalGoals+1),2);
+      all.push({local:l,visit:v,weight});
+    }
   }
-  return all.slice(0,count);
+  if(count>all.length) return null;
+
+  // Selección ponderada sin repetición
+  const selected=[];
+  const pool=[...all];
+  for(let i=0;i<count;i++){
+    const totalWeight=pool.reduce((s,x)=>s+x.weight,0);
+    let rand=Math.random()*totalWeight;
+    let idx=0;
+    for(let j=0;j<pool.length;j++){
+      rand-=pool[j].weight;
+      if(rand<=0){idx=j;break;}
+    }
+    selected.push({local:pool[idx].local,visit:pool[idx].visit});
+    pool.splice(idx,1);
+  }
+  return selected;
 }
 
 function finalPreviewAssign(){
